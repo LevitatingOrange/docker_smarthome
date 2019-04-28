@@ -1,0 +1,6 @@
+raspbian.img
+log/
+data/
+config/
+raspbian.img
+.DS_Store
