@@ -61,10 +61,10 @@ services:
       - DEBUG_ZDP=0
       - DEBUG_OTAU=0
   
-  # rflamps manages cheap rf devices
-  rflamps:
+  # rfplugs manages cheap rf devices
+  rfplugs:
     restart: on-failure
-    build: ./rflamps/
+    build: ./rfplugs/
     devices:
       - /dev/gpiomem
     volumes:
@@ -90,12 +90,12 @@ services:
     volumes:
       # TODO: consider having these in mapped dirs
       # Unifi v5.0.7 creates all of these directories (some remain empty)
-      - config:/var/lib/unifi
+      - ./config/unifi:/var/lib/unifi
       - log:/usr/lib/unifi/logs
       - log2:/var/log/unifi
       - run:/usr/lib/unifi/run
       - run2:/run/unifi
-      - work:/usr/lib/unifi/work
+      - ./data/unifi/work:/usr/lib/unifi/work
 
   # portainer for docker management
   portainer:
@@ -123,14 +123,14 @@ services:
     volumes:
       - "./config/unifi-psk-updater.toml/:/unifi-psk-updater.toml"
     ports:
-      - "10000:10000"
+      - "9002:9002"
     environment:
-      - CONF_FILE=/unifi-psk-updater.toml
+      - CONFIG_PATH=/unifi-psk-updater.toml
 
 ## unifi volumes
 volumes:
-  config:
-    driver: local
+  # config:
+  #   driver: local
   log:
     driver: local
   log2:
@@ -139,5 +139,5 @@ volumes:
     driver: local
   run2:
     driver: local
-  work:
-    driver: local
+  # work:
+  #   driver: local
