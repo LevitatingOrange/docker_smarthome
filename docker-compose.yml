@@ -38,7 +38,20 @@ services:
       # misc
       - "./log/home-assistant.log:/config/home-assistant.log"
       - "/etc/localtime:/etc/localtime:ro"
-
+      - "./data/wifi.svg:/config/www/wifi.svg"
+  webthings-gateway:
+    restart: on-failure
+    image: "mozillaiot/gateway:arm"
+    #network_mode: "host"
+    ports:
+      - "8180:8080"
+      - "8543:8443"
+    # devices:
+    #   - /dev/ttyUSB0
+    volumes:
+      # configs
+      - "./data/webthings-gateway:/home/node/.mozilla-iot"
+      - "/etc/localtime:/etc/localtime:ro"
   # deconz for all zigbee devices
   deconz:
     image: marthoc/deconz
@@ -50,8 +63,6 @@ services:
       - "9443:9443"
     volumes:
       - ./data/deconz:/root/.local/share/dresden-elektronik/deCONZ
-    devices:
-      - /dev/ttyUSB0
     environment:
       - DECONZ_WEB_PORT=9080
       - DECONZ_WS_PORT=9443
@@ -122,6 +133,7 @@ services:
     build: ./unifi-psk-updater
     volumes:
       - "./config/unifi-psk-updater.toml/:/unifi-psk-updater.toml"
+      - "./data/wifi.svg:/wifi.svg"
     ports:
       - "9002:9002"
     environment:
