@@ -5,19 +5,19 @@ services:
   # MQTT Broker for MQTT devices and the rfplugs service
   mqtt:
     restart: on-failure
-    image: "robotany/mosquitto-rpi"
+    image: "eclipse-mosquitto:latest"
     ports:
       - "1883:1883"
       - "9001:9001"
     volumes: 
       - "./config/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf"  
       - "./config/mosquitto/mosquitto_passwords:/mosqitto/config/mosquitto_passwords"  
-      - "./log/mosquitto.log:/mosquitto/log/mosquitto.log"
+      - "./log/mosquitto:/mosquitto/log/"
 
   # home assistant instance
   home-assistant:
     restart: on-failure
-    image: "homeassistant/raspberrypi3-homeassistant"
+    image: "homeassistant/home-assistant:latest"
     # needed for homekit?!
     network_mode: "host"
     ports:
@@ -38,29 +38,18 @@ services:
       # misc
       - "./log/home-assistant.log:/config/home-assistant.log"
       - "/etc/localtime:/etc/localtime:ro"
-      - "./data/wifi.svg:/config/www/wifi.svg"
-  webthings-gateway:
-    restart: on-failure
-    image: "mozillaiot/gateway:arm"
-    #network_mode: "host"
-    ports:
-      - "8180:8080"
-      - "8543:8443"
-    # devices:
-    #   - /dev/ttyUSB0
-    volumes:
-      # configs
-      - "./data/webthings-gateway:/home/node/.mozilla-iot"
-      - "/etc/localtime:/etc/localtime:ro"
+      #- "./data/wifi.svg:/config/www/wifi.svg"
   # deconz for all zigbee devices
   deconz:
-    image: marthoc/deconz
+    image: marthoc/deconz:latest
     #container_name: deconz
     network_mode: host
     restart: on-failure
     ports:
       - "9080:9080"
       - "9443:9443"
+    devices:
+      - /dev/ttyUSB0
     volumes:
       - ./data/deconz:/root/.local/share/dresden-elektronik/deCONZ
     environment:
@@ -71,48 +60,37 @@ services:
       - DEBUG_ZCL=0
       - DEBUG_ZDP=0
       - DEBUG_OTAU=0
-  
-  # rfplugs manages cheap rf devices
-  rfplugs:
-    restart: on-failure
-    build: ./rfplugs/
-    devices:
-      - /dev/gpiomem
-    volumes:
-      - "./config/rflamps.toml/:/rflamps.toml"
-    environment:
-      - CONF_FILE=/rflamps.toml
 
+  # node red for automation
+  node-red:
+    restart: on-failure
+    image: nodered/node-red
+    environment:
+      - TZ=Europe/Berlin
+    volumes:
+      - "./data/node-red:/data"
+      - "./config/node-red/settings.js:/data/settings.js"
+    ports:
+      - "1880:1880"
 
   ## Network, control and utilities
   # unifi for wifi management
   unifi:
     restart: on-failure
-    image: ryansch/unifi-rpi:latest
-    # needed for AP discovery and AP updates
-    network_mode: "host"
-    ports:
-      - "8080:8080"
-      - "8443:8443"
-      - "3478:3478"
-      - "10001:10001/udp"
-      - "8880:8880"
-      - "8843:8843"      
+    image: jacobalberty/unifi:latest
+    network_mode: host
+    environment:
+      - TZ=Europe/Berlin
+      - RUNAS_UID0=false
+      - UNIFI_UID=950
+      - UNIFI_GID=950
     volumes:
-      # TODO: consider having these in mapped dirs
-      # Unifi v5.0.7 creates all of these directories (some remain empty)
-      - ./config/unifi:/var/lib/unifi
-      - log:/usr/lib/unifi/logs
-      - log2:/var/log/unifi
-      - run:/usr/lib/unifi/run
-      - run2:/run/unifi
-      - ./data/unifi/work:/usr/lib/unifi/work
+    - ./log/unifi:/unifi/log
+    - ./data/unifi:/unifi/data
 
   # portainer for docker management
   portainer:
     image: portainer/portainer:latest
-      # using portainer image for raspberry pi by deviantony
-      # sources: [github.com](https://github.com/portainer/portainer.git)
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
       - "./data/portainer:/data"
@@ -122,34 +100,7 @@ services:
 
   # cloudflare ddns
   cloudflare-ddns:
-    image: oznu/cloudflare-ddns:armhf # change 'latest' to 'armhf' or 'aarch64' if running on an arm device
+    image: oznu/cloudflare-ddns:latest
     restart: on-failure
     env_file:
       - "config/cloudflare_creds.env"
-  
-  # guest passwords
-  unifi-psk-updater:
-    restart: on-failure
-    build: ./unifi-psk-updater
-    volumes:
-      - "./config/unifi-psk-updater.toml/:/unifi-psk-updater.toml"
-      - "./data/wifi.svg:/wifi.svg"
-    ports:
-      - "9002:9002"
-    environment:
-      - CONFIG_PATH=/unifi-psk-updater.toml
-
-## unifi volumes
-volumes:
-  # config:
-  #   driver: local
-  log:
-    driver: local
-  log2:
-    driver: local
-  run:
-    driver: local
-  run2:
-    driver: local
-  # work:
-  #   driver: local
