@@ -25,10 +25,8 @@ services:
       - "51827:51827"
     volumes:
       # configs
-      - "./config/ha/automations.yaml:/config/automations.yaml"
+      - "./config/ha/www/:/config/www/"
       - "./config/ha/configuration.yaml:/config/configuration.yaml"
-      - "./config/ha/groups.yaml:/config/groups.yaml"
-      - "./config/ha/scripts.yaml:/config/scripts.yaml"
       - "./config/ha/ui-lovelace.yaml:/config/ui-lovelace.yaml"
       - "./config/ha/ha_secrets.yaml:/config/secrets.yaml"
       # data files
@@ -38,7 +36,24 @@ services:
       # misc
       - "./log/home-assistant.log:/config/home-assistant.log"
       - "/etc/localtime:/etc/localtime:ro"
+
+#  appdaemon:
+ #   restart: on-failure
+ #   image: acockburn/appdaemon:latest
+    # env_file:
+    #   - ./config/appdaemon/secrets.env
+  #  environment:
+  #    - HA_URL="http://192.168.178.44:8123"
+  #    - DASH_URL="http://192.168.178.44:5050"
+  #  command: -D DEBUG
+  #  ports:
+  #    - "5050:5050"
+  #  volumes:
+  #    - ./config/appdaemon:/conf
+  #    - /etc/localtime:/etc/localtime:ro
       #- "./data/wifi.svg:/config/www/wifi.svg"
+
+  
   # deconz for all zigbee devices
   deconz:
     image: marthoc/deconz:latest
@@ -48,10 +63,14 @@ services:
     ports:
       - "9080:9080"
       - "9443:9443"
+      - "5900:5900"
     devices:
       - /dev/ttyUSB0
     volumes:
       - ./data/deconz:/root/.local/share/dresden-elektronik/deCONZ
+      - ./data/tradfri_ota:/root/otau
+    env_file:
+      - ./config/deconz/secrets.env
     environment:
       - DECONZ_WEB_PORT=9080
       - DECONZ_WS_PORT=9443
@@ -60,33 +79,41 @@ services:
       - DEBUG_ZCL=0
       - DEBUG_ZDP=0
       - DEBUG_OTAU=0
+      - DECONZ_VNC_MODE=1
+      - DECONZ_VNC_PORT=5900
+  
 
   # node red for automation
-  node-red:
-    restart: on-failure
-    image: nodered/node-red
-    environment:
-      - TZ=Europe/Berlin
-    volumes:
-      - "./data/node-red:/data"
-      - "./config/node-red/settings.js:/data/settings.js"
-    ports:
-      - "1880:1880"
+  # node-red:
+  #   restart: on-failure
+  #   image: nodered/node-red
+  #   environment:
+  #     - TZ=Europe/Berlin
+  #   volumes:
+  #     - "./data/node-red:/data"
+  #     - "./config/node-red/settings.js:/data/settings.js"
+  #   ports:
+  #     - "1880:1880"
 
   ## Network, control and utilities
   # unifi for wifi management
   unifi:
     restart: on-failure
     image: jacobalberty/unifi:latest
-    network_mode: host
     environment:
       - TZ=Europe/Berlin
       - RUNAS_UID0=false
       - UNIFI_UID=950
       - UNIFI_GID=950
+    ports:
+      - "8080:8080"
+      - "8880:8880"
+      - "8443:8443"
+      - "3478:3478/udp"
+      - "10001:10001/udp"
     volumes:
-    - ./log/unifi:/unifi/log
-    - ./data/unifi:/unifi/data
+      - ./log/unifi:/unifi/log
+      - ./data/unifi:/unifi/data
 
   # portainer for docker management
   portainer:
@@ -103,4 +130,87 @@ services:
     image: oznu/cloudflare-ddns:latest
     restart: on-failure
     env_file:
-      - "config/cloudflare_creds.env"
+      - "config/cloudflare/creds.env"
+  
+  ## Metrics
+  prometheus:
+    image: prom/prometheus:latest
+    restart: on-failure
+    volumes:
+      - "./config/prometheus:/etc/prometheus"
+      - "./data/prometheus:/prometheus-data"
+    ports:
+      - "9090:9090"
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    restart: on-failure
+    volumes:
+      - "./config/alertmanager:/etc/alertmanager"
+      - "./data/alertmanager:/alertmanager"
+    ports:
+      - "9093:9093"
+  
+  cadvisor:
+    image: google/cadvisor:latest
+    ports:
+    - 9092:8080
+    volumes:
+    - /:/rootfs:ro
+    - /var/run:/var/run:rw
+    - /sys:/sys:ro
+    - /var/lib/docker/:/var/lib/docker:ro
+    depends_on:
+    - redis
+
+  redis:
+    image: redis:latest
+    ports:
+    - 6379:6379
+  
+  # FTP server for printing
+  ftpd_server:
+    image: stilliard/pure-ftpd:hardened
+    ports:
+      - "21:21"
+      - "30000-30009:30000-30009"
+    volumes:
+      - "./data/ftp/data:/home/printer/"
+      - "./data/ftp/passwd:/etc/pure-ftpd/passwd"
+    env_file:
+      - "./config/ftp/env"
+    restart: on-failure
+
+  # # RADIUS authentication for WIFI
+  # radius_server:
+  #   image: freeradius/freeradius-server
+  #   ports:
+  #     - "2222:22"
+  #     - "1812:1812/udp"
+  #     - "1813:1813/udp"
+  #   volumes:
+  #     # The clients that 
+  #     - "./config/radius/clients.conf:/etc/raddb/clients.conf"
+  #     # Which authentication and authorization to use. We only enable eap-ttls and ldap here (that means, no client certs, server cert by letsencrypt, users are authenticated via ldap)
+  #     - "./config/radius/authorize.conf:/etc/raddb/mods-config/files/authorize"
+
+  #     # This dir has to not contain a CA file, because this would specify
+  #     # the root ca that issues client certs, which we do not want. We
+  #     # also disable eap-tls explicilty in the authorize config. Still to be
+  #     # sure, only include the radius server's cert here!
+  #     - 
+
+  #   restart: on-failure
+
+  # DAAPD for music streaming
+#  daapd:
+#    image: linuxserver/daapd
+#    network_mode: host
+#    environment:
+#      - PUID=1000
+#      - PGID=1000
+#      - TZ=Europe/London
+#    volumes:
+#      - ./data/daapd:/config
+#      - /home/levo/music:/music
+#    restart: unless-stopped

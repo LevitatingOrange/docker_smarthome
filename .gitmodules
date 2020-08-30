@@ -1,6 +1,0 @@
-[submodule "rfplugs"]
-	path = rfplugs
-	url = git@github.com:LevitatingOrange/rfplugs.git
-[submodule "unifi-psk-updater"]
-	path = unifi-psk-updater
-	url = git@github.com:LevitatingOrange/unifi-psk-updater.git
