@@ -4,6 +4,7 @@ services:
   ## Smarthome containers ##
   # MQTT Broker for MQTT devices and the rfplugs service
   mqtt:
+    container_name: mqtt
     restart: on-failure
     image: "eclipse-mosquitto:latest"
     ports:
@@ -12,23 +13,41 @@ services:
     volumes: 
       - "./config/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf"  
       - "./config/mosquitto/mosquitto_passwords:/mosqitto/config/mosquitto_passwords"  
-      - "./log/mosquitto:/mosquitto/log/"
-
+        #- "./log/mosquitto:/mosquitto/log/"
+  
+  zigbee2mqtt:
+    container_name: zigbee2mqtt
+    image: koenkk/zigbee2mqtt
+    volumes:
+      - ./data/zigbee2mqtt:/app/data
+      #- ./config/zigbee2mqtt/devices.yaml:/app/data/devices.yaml
+      - ./config/zigbee2mqtt/configuration.yaml:/app/data/configuration.yaml
+      - ./config/zigbee2mqtt/secrets.yaml:/app/data/secrets.yaml      
+      - /run/udev:/run/udev:ro                                        
+    devices:                                                          
+      - /dev/ttyACM0:/dev/ttyACM0
+    restart: always   
+    privileged: true
+    environment:
+      - TZ=Europe/Berlin
+  
   # home assistant instance
   home-assistant:
+    container_name: home-assistant
     restart: on-failure
     image: "homeassistant/home-assistant:latest"
     # needed for homekit?!
-    network_mode: "host"
+    #network_mode: "host"
     ports:
       - "8123:8123"
       - "51827:51827"
     volumes:
       # configs
-      - "./config/ha/www/:/config/www/"
       - "./config/ha/configuration.yaml:/config/configuration.yaml"
-      - "./config/ha/ui-lovelace.yaml:/config/ui-lovelace.yaml"
-      - "./config/ha/ha_secrets.yaml:/config/secrets.yaml"
+      - "./config/ha/automations.yaml:/config/automations.yaml"
+      - "./config/ha/lovelace:/config/lovelace"
+      - "./config/ha/zigbee2mqtt.yaml:/config/zigbee2mqtt.yaml"
+      - "./config/ha/secrets.yaml:/config/secrets.yaml"
       # data files
       - "./data/ha:/config/"
       # - "./ha/data/.storage:/config/.storage"
@@ -55,32 +74,32 @@ services:
 
   
   # deconz for all zigbee devices
-  deconz:
-    image: marthoc/deconz:latest
-    #container_name: deconz
-    network_mode: host
-    restart: on-failure
-    ports:
-      - "9080:9080"
-      - "9443:9443"
-      - "5900:5900"
-    devices:
-      - /dev/ttyUSB0
-    volumes:
-      - ./data/deconz:/root/.local/share/dresden-elektronik/deCONZ
-      - ./data/tradfri_ota:/root/otau
-    env_file:
-      - ./config/deconz/secrets.env
-    environment:
-      - DECONZ_WEB_PORT=9080
-      - DECONZ_WS_PORT=9443
-      - DEBUG_INFO=1
-      - DEBUG_APS=0
-      - DEBUG_ZCL=0
-      - DEBUG_ZDP=0
-      - DEBUG_OTAU=0
-      - DECONZ_VNC_MODE=1
-      - DECONZ_VNC_PORT=5900
+  #  deconz:
+  #    image: marthoc/deconz:latest
+  #    #container_name: deconz
+  #    #network_mode: host
+  #    #restart: on-failure
+  #    ports:
+  #      - "9080:9080"
+  #      - "9443:9443"
+  #      - "5900:5900"
+  #    devices:
+  #      - /dev/ttyUSB0
+  #    volumes:
+  #      - ./data/deconz:/root/.local/share/dresden-elektronik/deCONZ
+  #      - ./data/tradfri_ota:/root/otau
+  #    env_file:
+  #      - ./config/deconz/secrets.env
+  #    environment:
+  #      - DECONZ_WEB_PORT=9080
+  #      - DECONZ_WS_PORT=9443
+  #      - DEBUG_INFO=1
+  #      - DEBUG_APS=0
+  #      - DEBUG_ZCL=0
+  #      - DEBUG_ZDP=0
+  #      - DEBUG_OTAU=0
+  #      - DECONZ_VNC_MODE=1
+  #      - DECONZ_VNC_PORT=5900
   
 
   # node red for automation
@@ -98,6 +117,7 @@ services:
   ## Network, control and utilities
   # unifi for wifi management
   unifi:
+    container_name: unifi
     restart: on-failure
     image: jacobalberty/unifi:latest
     environment:
@@ -117,6 +137,7 @@ services:
 
   # portainer for docker management
   portainer:
+    container_name: portainer
     image: portainer/portainer:latest
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
@@ -127,90 +148,86 @@ services:
 
   # cloudflare ddns
   cloudflare-ddns:
+    container_name: cloudflare-ddns
     image: oznu/cloudflare-ddns:latest
     restart: on-failure
     env_file:
       - "config/cloudflare/creds.env"
   
   ## Metrics
-  prometheus:
-    image: prom/prometheus:latest
-    restart: on-failure
-    volumes:
-      - "./config/prometheus:/etc/prometheus"
-      - "./data/prometheus:/prometheus-data"
-    ports:
-      - "9090:9090"
-
-  alertmanager:
-    image: prom/alertmanager:latest
-    restart: on-failure
-    volumes:
-      - "./config/alertmanager:/etc/alertmanager"
-      - "./data/alertmanager:/alertmanager"
-    ports:
-      - "9093:9093"
-  
-  cadvisor:
-    image: google/cadvisor:latest
-    ports:
-    - 9092:8080
-    volumes:
-    - /:/rootfs:ro
-    - /var/run:/var/run:rw
-    - /sys:/sys:ro
-    - /var/lib/docker/:/var/lib/docker:ro
-    depends_on:
-    - redis
-
-  redis:
-    image: redis:latest
-    ports:
-    - 6379:6379
-  
-  # FTP server for printing
-  ftpd_server:
-    image: stilliard/pure-ftpd:hardened
-    ports:
-      - "21:21"
-      - "30000-30009:30000-30009"
-    volumes:
-      - "./data/ftp/data:/home/printer/"
-      - "./data/ftp/passwd:/etc/pure-ftpd/passwd"
-    env_file:
-      - "./config/ftp/env"
-    restart: on-failure
-
-  # # RADIUS authentication for WIFI
-  # radius_server:
-  #   image: freeradius/freeradius-server
-  #   ports:
-  #     - "2222:22"
-  #     - "1812:1812/udp"
-  #     - "1813:1813/udp"
-  #   volumes:
-  #     # The clients that 
-  #     - "./config/radius/clients.conf:/etc/raddb/clients.conf"
-  #     # Which authentication and authorization to use. We only enable eap-ttls and ldap here (that means, no client certs, server cert by letsencrypt, users are authenticated via ldap)
-  #     - "./config/radius/authorize.conf:/etc/raddb/mods-config/files/authorize"
-
-  #     # This dir has to not contain a CA file, because this would specify
-  #     # the root ca that issues client certs, which we do not want. We
-  #     # also disable eap-tls explicilty in the authorize config. Still to be
-  #     # sure, only include the radius server's cert here!
-  #     - 
-
-  #   restart: on-failure
-
-  # DAAPD for music streaming
-#  daapd:
-#    image: linuxserver/daapd
-#    network_mode: host
-#    environment:
-#      - PUID=1000
-#      - PGID=1000
-#      - TZ=Europe/London
+#  prometheus:
+#    image: prom/prometheus:latest
+#    restart: on-failure
 #    volumes:
-#      - ./data/daapd:/config
-#      - /home/levo/music:/music
-#    restart: unless-stopped
+#      - "./config/prometheus:/etc/prometheus"
+#      - "./data/prometheus:/prometheus-data"
+#    ports:
+#      - "9090:9090"
+#
+#  alertmanager:
+#    image: prom/alertmanager:latest
+#    restart: on-failure
+#    volumes:
+#      - "./config/alertmanager:/etc/alertmanager"
+#      - "./data/alertmanager:/alertmanager"
+#    ports:
+#      - "9093:9093"
+  
+        #  cadvisor:
+        #    image: google/cadvisor:latest
+        #    ports:
+        #    - 9092:8080
+        #    volumes:
+        #    - /:/rootfs:ro
+        #    - /var/run:/var/run:rw
+        #    - /sys:/sys:ro
+        #    - /var/lib/docker/:/var/lib/docker:ro
+        #    depends_on:
+        #    - redis
+
+        #redis:
+        #  image: redis:latest
+        #  ports:
+        #  - 6379:6379
+        #
+  # FTP server for printing
+  #ftpd_server:
+  #  image: stilliard/pure-ftpd:hardened
+  #  ports:
+  #    - "21:21"
+  #    - "30000-30009:30000-30009"
+  #  volumes:
+  #    - "./data/ftp/data:/home/printer/"
+  #    - "./data/ftp/passwd:/etc/pure-ftpd/passwd"
+  #  env_file:
+  #    - "./config/ftp/env"
+  #  restart: on-failure
+
+
+    # cups:
+    #    build: ./cups_custom_ppd/
+    #    #    ports:
+    #    #  - "631:631"
+    #    volumes:
+    #      - "./data/cups/:/config/"
+    #      #- "./config/cups/:/config/etc/"
+    #    #image: olbat/cupsd
+    #    #ports: 
+    #    #  - "631:631"
+    #    #volumes:
+    #    #  - "/var/run/dbus:/var/run/dbus"
+    #
+#  minecraft:
+#    image: itzg/minecraft-server
+#    ports:
+#      - 25565:25565
+#    volumes:
+#      - "./data/minecraft:/data"
+#    environment:
+#      - TZ=Europe/Berlin
+#      - EULA=TRUE
+#      - TYPE=FABRIC
+#      - MEMORY=2G
+#      - VERSION=1.16.4
+#      - FABRICVERSION=0.6.1.51
+#    restart: on-failure

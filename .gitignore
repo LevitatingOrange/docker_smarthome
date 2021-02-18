@@ -5,3 +5,4 @@ config/
 raspbian.img
 .DS_Store
 ca/
+*backup/
